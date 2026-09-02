@@ -1,4 +1,4 @@
-# VANTTEC USV Gazebo simulator
+# VANTTEC USV Gazebo Simulator
 
 This repository has the aim of facilitating the use of the ASV wave sim plugin for gazebo (https://github.com/srmainwaring/asv_wave_sim). By using docker, this repository enables anyone utilizing a linux distribution and an x11 display server to quickly and easily run the full simulation.
 
@@ -7,6 +7,8 @@ This repository has the aim of facilitating the use of the ASV wave sim plugin f
 - Docker installed on your machine
 - An x11 display server running on a linux machine
 - Decent hardware (CPU/GPU) for smooth performance
+
+Note: This repository has only been tested on Ubuntu 22.04, although it should probably work on any linux distribution that uses x11.
 
 ## Installation
 
