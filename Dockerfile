@@ -66,6 +66,7 @@ RUN echo "source /root/gz_ws/install/setup.bash" >> ~/.bashrc
 
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 
-
+# Disable shared memory in fastdds to allow for topics to be viewed outside container
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/root/fastdds_no_shm.xml
 
 

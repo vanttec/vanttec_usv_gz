@@ -40,4 +40,8 @@ This will create a container from the built image and open a terminal in its /ro
 ```
 ros2 launch usv_description gazebo_launch.py
 ```
+Or, to run the simulation in headless mode (ros2 topics should be visible in the host machine):
+```
+ros2 launch usv_description headless_gazebo_launch.py
+```
 Have fun!!
