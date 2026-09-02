@@ -4,9 +4,9 @@ This repository has the aim of facilitating the use of the ASV wave sim plugin f
 
 
 ## Prerequisites
-- Docker installed on your machine.
+- Docker installed on your machine
 - An x11 display server running on a linux machine
-- Decent hardware (CPU/GPU) for smooth performance.
+- Decent hardware (CPU/GPU) for smooth performance
 
 ## Installation
 
