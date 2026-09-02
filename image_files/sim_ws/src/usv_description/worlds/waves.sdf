@@ -1,0 +1,101 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="waves">
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics">
+        <engine>
+          <filename>gz-physics-dartsim-plugin</filename>
+        </engine>
+    </plugin>
+    <physics name="default_physics" type="dart">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      
+      <dart>
+        <collision_detector>ode</collision_detector>    
+        <solver>
+          <solver_type>dantzig</solver_type>
+        </solver>
+      </dart>
+
+    </physics>
+
+
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+      <background_color>0.8 0.8 0.8</background_color>
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu">
+    </plugin>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+      <grid>false</grid>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.6 0.6 0.6 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <include>
+      <pose>0 0 0 0 0 0</pose>
+      <uri>calm_waves</uri>
+    </include>
+<!-- 
+    <include>
+      <pose>0 0 0 0 0 0</pose>
+      <uri>follow_the_path_challenge</uri>
+    </include> -->
+
+    <!-- <include>
+      <pose>0 0 0 0 0 0</pose>
+      <uri>mandatory_challenge</uri>
+    </include> -->
+
+    <include>
+      <pose>25 4 0 0 0 0</pose>
+      <uri>round_buoy_red</uri>
+      <name>red_0</name>
+    </include>
+
+    <include>
+      <pose>18 -2 0 0 0 0</pose>
+      <uri>round_buoy_red</uri>
+      <name>red_1</name>
+    </include>
+
+    <include>
+      <pose>12 6 0 0 0 0</pose>
+      <uri>round_buoy_red</uri>
+      <name>red_2</name>
+    </include>
+
+    <!-- <include>
+      <pose>1 3 -0.1 0 0 0</pose>
+      <uri>model://vtec_s5</uri>
+    </include> -->
+
+    <include>
+      <pose>5 7 0.3 0 0 0</pose>
+      <uri>model://vtec_s4</uri>
+      <name>vtec_2</name>
+    </include>
+
+
+  </world>
+</sdf>

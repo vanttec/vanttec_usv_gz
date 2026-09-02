@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Site BuildName="(empty)"
+	BuildStamp="20260424-0128-Experimental"
+	Name="GregU"
+	Generator="ctest-3.22.1"
+	CompilerName="/usr/bin/g++-11"
+	CompilerVersion="11.4.0"
+	OSName="Linux"
+	Hostname="GregU"
+	OSRelease="6.8.0-64-generic"
+	OSVersion="#67~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue Jun 24 15:19:46 UTC 2"
+	OSPlatform="x86_64"
+	Is64Bits="1"
+	VendorString="GenuineIntel"
+	VendorID="Intel Corporation"
+	FamilyID="6"
+	ModelID="183"
+	ProcessorCacheSize="24576"
+	NumberOfLogicalCPU="20"
+	NumberOfPhysicalCPU="14"
+	TotalVirtualMemory="2047"
+	TotalPhysicalMemory="31779"
+	LogicalProcessorsPerPhysical="1"
+	ProcessorClockFrequency="4014.96"
+	>
+	<Testing>
+		<StartDateTime>Apr 24 15:57 CST</StartDateTime>
+		<StartTestTime>1777067859</StartTestTime>
+		<TestList/>
+		<EndDateTime>Apr 24 15:57 CST</EndDateTime>
+		<EndTestTime>1777067859</EndTestTime>
+		<ElapsedMinutes>0</ElapsedMinutes>
+	</Testing>
+</Site>

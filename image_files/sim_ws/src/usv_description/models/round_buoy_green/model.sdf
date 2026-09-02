@@ -1,0 +1,75 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+    <model name="round_buoy_green">
+        <link name="link">
+            <inertial>
+                <pose>0 0 0 0 0 0</pose>
+                <mass>3.5</mass>
+                <inertia>
+                    <ixx>0.0875</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>0.0875</iyy>
+                    <iyz>0</iyz>
+                    <izz>0.0875</izz>
+                </inertia>
+            </inertial>
+            <collision name="collision">
+                <geometry>
+                    <sphere>
+                        <radius>0.25</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <visual name="visual">
+                <geometry>
+                    <mesh>
+                        <uri>meshes/mb_round_buoy.dae</uri>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>0 1 0 1</ambient>
+                    <diffuse>0 1 0 1</diffuse>
+                    <specular>0 1 0 1</specular>
+                </material>
+            </visual>
+        </link>
+    <!-- Hydrodynamics plugin -->
+      <plugin
+        filename="gz-waves1-hydrodynamics-system"
+        name="gz::sim::systems::Hydrodynamics">
+
+        <link_name>link</link_name>
+
+
+        <hydrodynamics>
+            <damping_on>1</damping_on>
+            <viscous_drag_on>1</viscous_drag_on>
+            <pressure_drag_on>1</pressure_drag_on>
+
+            <!-- Linear and Angular Damping -->
+            <cDampL1>1.0E-6</cDampL1>
+            <cDampL2>1.0E-6</cDampL2>
+            <cDampR1>1.0E-6</cDampR1>
+            <cDampR2>1.0E-6</cDampR2>
+
+            <!-- 'Pressure' Drag -->
+            <cPDrag1>1.0E+2</cPDrag1>
+            <cPDrag2>1.0E+2</cPDrag2>
+            <fPDrag>0.4</fPDrag>
+            <cSDrag1>1.0E+2</cSDrag1>
+            <cSDrag2>1.0E+2</cSDrag2>
+            <fSDrag>0.4</fSDrag>
+            <vRDrag>1.0</vRDrag>
+        </hydrodynamics>
+
+        <!-- Control visibility of markers -->
+        <markers>
+            <update_rate>10</update_rate>
+            <water_patch>0</water_patch>
+            <waterline>0</waterline>
+            <underwater_surface>0</underwater_surface>
+        </markers>
+        </plugin>
+    </model>
+</sdf>

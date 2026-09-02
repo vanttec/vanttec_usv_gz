@@ -1,0 +1,19 @@
+{
+    "ROS2.distro": "humble",
+    "python.autoComplete.extraPaths": [
+        "/home/mwlgt/vanttec_ws/install/zed_interfaces/local/lib/python3.10/dist-packages",
+        "/home/mwlgt/vanttec_ws/install/velodyne_msgs/local/lib/python3.10/dist-packages",
+        "/home/mwlgt/vanttec_ws/install/usv_interfaces/local/lib/python3.10/dist-packages",
+        "/home/mwlgt/vanttec_ws/install/joy_teleop/lib/python3.10/site-packages",
+        "/home/mwlgt/vanttec_ws/install/teleop_tools_msgs/local/lib/python3.10/dist-packages",
+        "/home/mwlgt/vanttec_ws/install/sbg_driver/local/lib/python3.10/dist-packages",
+        "/home/mwlgt/vanttec_ws/install/mouse_teleop/lib/python3.10/site-packages",
+        "/home/mwlgt/vanttec_ws/install/lio_sam/local/lib/python3.10/dist-packages",
+        "/home/mwlgt/vanttec_ws/install/key_teleop/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "cSpell.words": [
+        "rclcpp"
+    ]
+}
