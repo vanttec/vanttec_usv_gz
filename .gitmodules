@@ -1,0 +1,6 @@
+[submodule "image_files/gz_ws/src/asv_wave_sim"]
+	path = image_files/gz_ws/src/asv_wave_sim
+	url = https://github.com/mwlgt/asv_wave_sim.git
+[submodule "image_files/sim_ws/src/deps/sbg_ros2_driver"]
+	path = image_files/sim_ws/src/deps/sbg_ros2_driver
+	url = https://github.com/SBG-Systems/sbg_ros2_driver.git
