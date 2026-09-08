@@ -7,4 +7,5 @@ sudo docker run -it \
   -e NVIDIA_DRIVER_CAPABILITIES=all \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v ./image_vols/sim_ws:/root/sim_ws \
   usv-gz:latest

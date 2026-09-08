@@ -55,13 +55,14 @@ ENV GZ_GUI_PLUGIN_PATH=\
 WORKDIR /root
 
 
-# Build ros2 ws and source packages
-RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
-                  cd sim_ws && \
-                  colcon build"
+# Build ros2 ws and source packages Note: doesn't work with develop branch volume setup
+# RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
+#                   cd sim_ws && \
+#                   colcon build"
 
 RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-RUN echo "source /root/sim_ws/install/setup.bash" >> ~/.bashrc
+# Echo removed for develop changes
+# RUN echo "source /root/sim_ws/install/setup.bash" >> ~/.bashrc
 RUN echo "source /root/gz_ws/install/setup.bash" >> ~/.bashrc
 
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
