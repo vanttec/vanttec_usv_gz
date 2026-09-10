@@ -44,4 +44,33 @@ Or, to run the simulation in headless mode (ros2 topics should be visible in the
 ```
 ros2 launch usv_description headless_gazebo_launch.py
 ```
+
+### Auxiliary step: synchronize ros2 environment variables
+
+To be able to see ros2 topics outside the container, which is the intended use case for this repository, multiple conditions must be met:
+
+- You have ros2 humble installed on your machine, and it is using fast dds
+- You have the ROS_LOCALHOST_ONLY environment variable set to "0"
+- You have the ROS_DOMAIN_ID environment variable set to "46"
+
+If you desire to use a distinct domain id, simply run the following command inside the container before launching the simulation (or modify in the Dockerfile before building):
+
+```
+export ROS_DOMAIN_ID=<your_desired_id>
+```
+
+## Simulation ros2 topic configuration
+
+The ros2 topics published by the simulation are designed to mimic the topics the physical USV publishes. Some notable topics are:
+
+1. /usv/left_thruster [std_msgs/msg/Float64] and /usv/right_thruster [std_msgs/msg/Float64]: thruster inputs to move the boat
+2. /beeblebrox/video [sensor_msgs/msg/Image]: rgb camera positioned in the same place as real zed x mini. (although with no depth capabilities)
+3. /sbg/ekf_quat [sbg_driver/msg/SbgEkfQuat], /imu/nav_sat_fix [sensor_msgs/msg/NavSatFix], and more Sbg topics recreating real INS measurements while deployed
+
+To see all ros2 topics available, simply run the following command on your host machine (Assuming you have the ROS_DOMAIN_ID setup correctly)
+
+```
+ros2 topic list -t
+```
+
 Have fun!!

@@ -3,4 +3,5 @@ install/
 log/
 .Dockerfile.swp
 .vscode/
+.cache/
 compile_commands.json
