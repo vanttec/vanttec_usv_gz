@@ -93,7 +93,7 @@
     <include>
       <pose>5 7 0.3 0 0 0</pose>
       <uri>model://vtec_s4</uri>
-      <name>vtec_2</name>
+      <name>vtec_s4</name>
     </include>
 
 

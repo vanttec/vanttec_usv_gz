@@ -430,7 +430,7 @@
       name="gz::sim::systems::Hydrodynamics">
 
       <enable>vtec_s4::base_link</enable>
-      <enable>vtec_2::base_link</enable>
+      <enable>vtec_s5::base_link</enable>
 
       <hydrodynamics>
         <damping_on>1</damping_on>
