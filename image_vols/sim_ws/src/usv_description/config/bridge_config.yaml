@@ -14,6 +14,10 @@
   ros_type_name: "nav_msgs/msg/Odometry"
   gz_type_name: "gz.msgs.OdometryWithCovariance"
   direction: GZ_TO_ROS
+- ros_topic_name: "/imu/data"
+  gz_topic_name: "/world/waves/model/vtec_s4/link/base_link/sensor/imu/imu"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
 # ------ ros to gz (commands)
 - ros_topic_name: "/usv2/left_thruster"
   gz_topic_name: "/model/vtec_s5/joint/left_engine_propeller_joint/cmd_thrust"
