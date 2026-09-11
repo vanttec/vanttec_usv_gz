@@ -5,10 +5,7 @@ This repository has the aim of facilitating the use of the ASV wave sim plugin f
 
 ## Prerequisites
 - Docker installed on your machine
-- An x11 display server running on a linux machine
 - Decent hardware (CPU/GPU) for smooth performance
-
-Note: This repository has only been tested on Ubuntu 22.04, although it should probably work on any linux distribution that uses x11.
 
 ## Installation
 
@@ -35,12 +32,7 @@ Once the image is built, the following command can be used:
 chmod +x start_container.sh
 ./start_container.sh
 ```
-This will create a container from the built image and open a terminal in its /root directory. This container is already set up to run the simulation. A common command to launch it is:
-
-```
-ros2 launch usv_description gazebo_launch.py
-```
-Or, to run the simulation in headless mode (ros2 topics should be visible in the host machine):
+This will create a container from the built image and open a terminal in its /root directory. This container is already set up to run the simulation. To run the simulation in headless mode (ros2 topics should be visible in the host machine):
 ```
 ros2 launch usv_description headless_gazebo_launch.py
 ```
