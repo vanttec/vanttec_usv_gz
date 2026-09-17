@@ -1,5 +1,6 @@
 #include <memory>
 #include <random>
+#include <sbg_driver/msg/detail/sbg_ekf_nav__struct.hpp>
 #include <sbg_driver/msg/detail/sbg_ekf_quat__struct.hpp>
 #include <std_msgs/msg/detail/float64__struct.hpp>
 #include "rclcpp/rclcpp.hpp"
@@ -10,6 +11,7 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "sbg_driver/msg/sbg_ekf_quat.hpp"
+#include "sbg_driver/msg/sbg_ekf_nav.hpp"
 
 using namespace std::chrono_literals;
 
@@ -20,10 +22,11 @@ public:
   : Node("quat_conversion_node")
   {
     // Create Publisher for the extracted Z angle (Yaw)
-    publisher_ = this->create_publisher<sbg_driver::msg::SbgEkfQuat>(
+    publisher_sbg_quat = this->create_publisher<sbg_driver::msg::SbgEkfQuat>(
       "/sbg/ekf_quat", 10);
 
-    publisher_2 = this->create_publisher<std_msgs::msg::Float64>(
+    // Create publisher to extract arbitrary distance value
+    publisher_distance = this->create_publisher<std_msgs::msg::Float64>(
       "/mausv/distance", 10);
 
     // Create Subscription to the Odometry topic
@@ -50,9 +53,16 @@ public:
     // Initialize publisher
     gps_pub = this->create_publisher<sensor_msgs::msg::NavSatFix>("/imu/nav_sat_fix",10);
 
+    // Publisher for sbg format of ekfNav
+    publisher_sbg_nav = this->create_publisher<sbg_driver::msg::SbgEkfNav>(
+      "/sbg/ekf_nav", 10);
+
     // Initialize random number generator for Gaussian noise
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     generator_.seed(seed);
+
+    // Record start time
+    start_time_ = this->now();
 
   }
 
@@ -60,7 +70,7 @@ private:
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
 
-    RCLCPP_INFO(this->get_logger(), "Calling back");
+    // RCLCPP_INFO(this->get_logger(), "Calling back");
     // 1. Extract the quaternion from the Odometry message
     tf2::Quaternion q(
       msg->pose.pose.orientation.x,
@@ -79,13 +89,13 @@ private:
 
 
     // 4. Publish the angle
-    publisher_->publish(out_msg);
+    publisher_sbg_quat->publish(out_msg);
 
     double current_x = msg->pose.pose.position.x;
     double distance = 18.3-current_x;
     std_msgs::msg::Float64 msg_distance = std_msgs::msg::Float64();
     msg_distance.data = distance;
-    publisher_2->publish(msg_distance);
+    publisher_distance->publish(msg_distance);
 
     latest_odom_ = msg;
 
@@ -151,16 +161,74 @@ private:
     gps_msg.position_covariance_type = sensor_msgs::msg::NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN; // 2
 
     gps_pub->publish(gps_msg);
+
+    // PUBLISH SBG EKF NAV
+    // ------------------------------------------------------------------------------
+    auto sbg_nav_msg = sbg_driver::msg::SbgEkfNav();
+
+    // --- Header ---
+    sbg_nav_msg.header.stamp = gps_msg.header.stamp;
+    // This topic will be filled using NED
+    sbg_nav_msg.header.frame_id = "imu_link_ned"; 
+
+    // --- Time Stamp ---
+    auto time_since_start = this->now() - start_time_;
+    sbg_nav_msg.time_stamp = time_since_start.nanoseconds() / 1000;
+
+    // --- Coordinates ---
+    sbg_nav_msg.latitude = gps_msg.latitude;
+    sbg_nav_msg.longitude = gps_msg.longitude;
+    sbg_nav_msg.altitude = gps_msg.altitude;
+    
+    // Undulation (Difference between WGS-84 Ellipsoid and MSL). 
+    // In Sarasota, this is roughly -26.0 meters, but 0.0 is often fine for local simulation.
+    sbg_nav_msg.undulation = 0.0; 
+
+    // --- Velocity (ENU Convention) ---
+    // Direct 1:1 mapping from standard ROS 2 Odometry, changing from ENU to NED
+    sbg_nav_msg.velocity.x = latest_odom_->twist.twist.linear.y; // North
+    sbg_nav_msg.velocity.y = latest_odom_->twist.twist.linear.x; // East
+    sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z; // Down
+
+    // --- Position Accuracy (1-Sigma, NED Convention) ---
+    // sqrt of variance gives the standard deviation
+    sbg_nav_msg.position_accuracy.x = std::sqrt(var_y); // East std_dev
+    sbg_nav_msg.position_accuracy.y = std::sqrt(var_x); // North std_dev
+    sbg_nav_msg.position_accuracy.z = std::sqrt(var_z); // Vertical std_dev
+
+    // --- Velocity Accuracy ---
+    // Set to 0.05 for simplicity
+    sbg_nav_msg.velocity_accuracy.x = 0.05; 
+    sbg_nav_msg.velocity_accuracy.y = 0.05;
+    sbg_nav_msg.velocity_accuracy.z = 0.05;
+
+    // --- Sample values for the status fields ---   
+    sbg_nav_msg.status.solution_mode = 4; // 4 = NAV_POSITION (Valid Navigation Solution)
+    sbg_nav_msg.status.position_valid = true; // (position error < 10m)
+    sbg_nav_msg.status.velocity_valid = true;
+    sbg_nav_msg.status.attitude_valid = true; 
+    sbg_nav_msg.status.heading_valid = true;
+    sbg_nav_msg.status.mag_ref_used = true; // Using magnetometer heading over gps
+    sbg_nav_msg.status.gps1_pos_used = true; // Simulating valid GPS signal
+    sbg_nav_msg.status.gps1_vel_used = true;
+    sbg_nav_msg.status.gps1_hdt_used = false; // GPS heading does not work consistently in the real world
+    sbg_nav_msg.status.gps2_pos_used = false; // No second antenna used
+    sbg_nav_msg.status.gps2_vel_used = false;
+    sbg_nav_msg.status.gps2_hdt_used = false;
+
+    publisher_sbg_nav->publish(sbg_nav_msg);
   }
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
-  rclcpp::Publisher<sbg_driver::msg::SbgEkfQuat>::SharedPtr publisher_;
-  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher_2;
+  rclcpp::Publisher<sbg_driver::msg::SbgEkfQuat>::SharedPtr publisher_sbg_quat;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher_distance;
+  rclcpp::Publisher<sbg_driver::msg::SbgEkfNav>::SharedPtr publisher_sbg_nav;
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr gps_pub;
   rclcpp::TimerBase::SharedPtr timer_gps;
   nav_msgs::msg::Odometry::SharedPtr latest_odom_;
 
   std::default_random_engine generator_;
+  rclcpp::Time start_time_;
   
   
 };
