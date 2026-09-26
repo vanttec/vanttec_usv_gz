@@ -87,6 +87,19 @@ private:
     out_msg.quaternion.z = q.getZ();
     out_msg.quaternion.w = q.getW();
 
+    // --- Sample values for the status fields ---   
+    out_msg.status.solution_mode = 4; // 4 = NAV_POSITION (Valid Navigation Solution)
+    out_msg.status.position_valid = true; // (position error < 10m)
+    out_msg.status.velocity_valid = true;
+    out_msg.status.attitude_valid = true; 
+    out_msg.status.heading_valid = true;
+    out_msg.status.mag_ref_used = true; // Using magnetometer heading over gps
+    out_msg.status.gps1_pos_used = true; // Simulating valid GPS signal
+    out_msg.status.gps1_vel_used = true;
+    out_msg.status.gps1_hdt_used = false; // GPS heading does not work consistently in the real world
+    out_msg.status.gps2_pos_used = false; // No second antenna used
+    out_msg.status.gps2_vel_used = false;
+    out_msg.status.gps2_hdt_used = false;
 
     // 4. Publish the angle
     publisher_sbg_quat->publish(out_msg);
