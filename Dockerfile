@@ -14,7 +14,7 @@ WORKDIR /root/gz_ws
 
 RUN apt install ros-humble-boost-* libcgal-dev libgz-msgs9-dev \
 libgz-sim7-dev libgz-rendering9-dev libfftw3-dev ros-humble-rtcm-msgs \
-ros-humble-nmea-msgs ros-humble-ament-cmake -y
+ros-humble-nmea-msgs ros-humble-ament-cmake ros-humble-rviz2 -y
 
 # cgal setup
 RUN mkdir cgal
