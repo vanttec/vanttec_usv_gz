@@ -47,7 +47,7 @@ public:
     this->declare_parameter("variance_z", 3.50);
 
     timer_gps = this->create_wall_timer(
-      200ms, std::bind(&QuatConversionNode::gps_callback, this)
+      100ms, std::bind(&QuatConversionNode::gps_callback, this)
     );
 
     // Initialize publisher
@@ -70,22 +70,34 @@ private:
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
 
-    // RCLCPP_INFO(this->get_logger(), "Calling back");
-    // 1. Extract the quaternion from the Odometry message
-    tf2::Quaternion q(
+    // Extract the quaternion from the Odometry message 
+    tf2::Quaternion q_enu(
       msg->pose.pose.orientation.x,
       msg->pose.pose.orientation.y,
       msg->pose.pose.orientation.z,
-      msg->pose.pose.orientation.w);
+      msg->pose.pose.orientation.w
+    );
 
-    sbg_driver::msg::SbgEkfQuat out_msg = sbg_driver::msg::SbgEkfQuat();
+    // Base frame: ENU (East-North-Up) to NED (North-East-Down) 
+    // Requires a +90 deg Yaw, then a +180 deg Roll
+    tf2::Quaternion q_enu_to_ned;
+    q_enu_to_ned.setRPY(M_PI, 0.0, M_PI_2); 
 
-    
+    // Body frame: FLU (Forward-Left-Up) to FRD (Forward-Right-Down)
+    // Requires a +180 deg Roll
+    tf2::Quaternion q_flu_to_frd;
+    q_flu_to_frd.setRPY(M_PI, 0.0, 0.0);
 
-    out_msg.quaternion.x = q.getX();
-    out_msg.quaternion.y = q.getY();
-    out_msg.quaternion.z = q.getZ();
-    out_msg.quaternion.w = q.getW();
+    // Apply the rotations to convert the quaternion
+    tf2::Quaternion q_ned = q_enu_to_ned * q_enu * q_flu_to_frd;
+    q_ned.normalize(); // Good practice to prevent compounding floating point drift
+
+    // 4. Populate the SBG message
+    sbg_driver::msg::SbgEkfQuat out_msg;
+    out_msg.quaternion.x = q_ned.getX();
+    out_msg.quaternion.y = q_ned.getY();
+    out_msg.quaternion.z = q_ned.getZ();
+    out_msg.quaternion.w = q_ned.getW();
 
     // --- Sample values for the status fields ---   
     out_msg.status.solution_mode = 4; // 4 = NAV_POSITION (Valid Navigation Solution)
@@ -211,7 +223,6 @@ private:
 
     // --- Velocity Accuracy ---
     // Set to 0.05 for simplicity
-    sbg_nav_msg.velocity_accuracy.x = 0.05; 
     sbg_nav_msg.velocity_accuracy.y = 0.05;
     sbg_nav_msg.velocity_accuracy.z = 0.05;
 
