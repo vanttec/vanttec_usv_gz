@@ -8,7 +8,19 @@ This repository has the aim of facilitating the use of the ASV wave sim plugin f
 - An x11 display server running on a linux machine
 - Decent hardware (CPU/GPU) for smooth performance
 
+ 
 Note: This repository has only been tested on Ubuntu 22.04, although it should probably work on any linux distribution that uses x11.
+
+#### Optional for use with nvidia
+
+1. Install the [appropriate nvidia driver](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)
+2. Install the [nvidia container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+3. Register the nvidia runtime:
+
+```
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
 
 ## Installation
 
