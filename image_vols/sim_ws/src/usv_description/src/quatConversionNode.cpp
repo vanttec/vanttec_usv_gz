@@ -1,8 +1,11 @@
+#include <functional>
 #include <memory>
 #include <random>
 #include <sbg_driver/msg/detail/sbg_ekf_nav__struct.hpp>
 #include <sbg_driver/msg/detail/sbg_ekf_quat__struct.hpp>
+#include <sensor_msgs/msg/detail/imu__struct.hpp>
 #include <std_msgs/msg/detail/float64__struct.hpp>
+#include <tf2/LinearMath/Quaternion.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
@@ -12,6 +15,11 @@
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "sbg_driver/msg/sbg_ekf_quat.hpp"
 #include "sbg_driver/msg/sbg_ekf_nav.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
+#include "tf2/convert.h"
+#include "tf2/utils.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 using namespace std::chrono_literals;
 
@@ -33,6 +41,11 @@ public:
     subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "/gz/odometry", 10, 
       std::bind(&QuatConversionNode::odom_callback, this, std::placeholders::_1));
+
+    subscription_enu_imu = this->create_subscription<sensor_msgs::msg::Imu>("/imu/data_enu",
+       10, std::bind(&QuatConversionNode::imu_callback,this,std::placeholders::_1));
+
+    imu_ned_pub = this->create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);
 
     // GPS conversion
 
@@ -67,6 +80,64 @@ public:
   }
 
 private:
+void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+    // 1. Create a new Imu message and copy the original data (keeps timestamp, frame_id, etc.)
+    sensor_msgs::msg::Imu imu_ned = *msg;
+
+    // Optional: Update the frame_id to reflect the new coordinate frame
+    imu_ned.header.frame_id = msg->header.frame_id + "_ned";
+
+    // 2. Translate Linear Acceleration (X -> Y, Y -> X, Z -> -Z)
+    imu_ned.linear_acceleration.x = msg->linear_acceleration.y;
+    imu_ned.linear_acceleration.y = msg->linear_acceleration.x;
+    imu_ned.linear_acceleration.z = -msg->linear_acceleration.z;
+
+    // 3. Translate Angular Velocity (X -> Y, Y -> X, Z -> -Z)
+    imu_ned.angular_velocity.x = msg->angular_velocity.y;
+    imu_ned.angular_velocity.y = msg->angular_velocity.x;
+    imu_ned.angular_velocity.z = -msg->angular_velocity.z;
+
+    // 4. Translate Orientation (Quaternion)
+    // The transformation from ENU to NED is a Yaw of 90 degrees (pi/2) 
+    // and a Roll of 180 degrees (pi).
+    tf2::Quaternion q_enu, q_rot, q_ned;
+    tf2::fromMsg(msg->orientation, q_enu);
+    
+    // Set rotation: Roll = pi, Pitch = 0, Yaw = pi/2
+    q_rot.setRPY(M_PI, 0.0, M_PI_2);
+    
+    // Apply rotation to the quaternion
+    q_ned = q_rot * q_enu;
+    q_ned.normalize(); // Always normalize after quaternion math
+    
+    // Convert back to ROS message format
+    imu_ned.orientation.w = q_ned.w();
+    imu_ned.orientation.x = q_ned.x();
+    imu_ned.orientation.y = q_ned.y();
+    imu_ned.orientation.z = q_ned.z();
+    
+    // 5. Translate Covariance Matrices
+    // Using 'auto' allows C++ to automatically deduce the ROS 2 covariance array type
+    auto rotate_covariance = [](const auto& in, auto& out) {
+        if (in[0] == -1.0) { 
+            // -1.0 indicates covariance is unknown, pass it through unchanged
+            out = in;
+            return;
+        }
+        // Apply covariance tensor transformation: C_ned = R * C_enu * R^T
+        out[0] = in[4];   out[1] = in[3];   out[2] = -in[5];
+        out[3] = in[1];   out[4] = in[0];   out[5] = -in[2];
+        out[6] = -in[7];  out[7] = -in[6];  out[8] = in[8];
+    };
+
+    rotate_covariance(msg->orientation_covariance, imu_ned.orientation_covariance);
+    rotate_covariance(msg->angular_velocity_covariance, imu_ned.angular_velocity_covariance);
+    rotate_covariance(msg->linear_acceleration_covariance, imu_ned.linear_acceleration_covariance);
+
+    // 6. Publish the converted message
+    imu_ned_pub->publish(imu_ned);
+}
+
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
 
@@ -212,9 +283,23 @@ private:
 
     // --- Velocity (ENU Convention) ---
     // Direct 1:1 mapping from standard ROS 2 Odometry, changing from ENU to NED
-    sbg_nav_msg.velocity.x = latest_odom_->twist.twist.linear.y; // North
-    sbg_nav_msg.velocity.y = latest_odom_->twist.twist.linear.x; // East
-    sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z; // Down
+    // sbg_nav_msg.velocity.x = latest_odom_->twist.twist.linear.y; // North
+    // sbg_nav_msg.velocity.y = latest_odom_->twist.twist.linear.x; // East
+    // sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z; // Down
+
+    const auto & q_msg= latest_odom_->pose.pose.orientation;
+    tf2::Quaternion q(q_msg.x,q_msg.y,q_msg.z,q_msg.w);
+    double roll,pitch,yaw_enu;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw_enu);
+    const double x_b = latest_odom_->twist.twist.linear.x;
+    const double y_b = latest_odom_->twist.twist.linear.y;
+    const double c = std::cos(yaw_enu);
+    const double s = std::sin(yaw_enu);
+    const double v_north = x_b *s + y_b * c;
+    const double v_east = x_b*c-y_b*s;
+    sbg_nav_msg.velocity.x = v_north;
+    sbg_nav_msg.velocity.y = v_east;
+    sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z;
 
     // --- Position Accuracy (1-Sigma, NED Convention) ---
     // sqrt of variance gives the standard deviation
@@ -245,10 +330,12 @@ private:
   }
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr subscription_enu_imu;
   rclcpp::Publisher<sbg_driver::msg::SbgEkfQuat>::SharedPtr publisher_sbg_quat;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher_distance;
   rclcpp::Publisher<sbg_driver::msg::SbgEkfNav>::SharedPtr publisher_sbg_nav;
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr gps_pub;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_ned_pub;
   rclcpp::TimerBase::SharedPtr timer_gps;
   nav_msgs::msg::Odometry::SharedPtr latest_odom_;
 
