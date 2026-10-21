@@ -41,12 +41,21 @@ The build process may take a few minutes, be patient.
 
 ### Step 3: Run the container and simulation
 
-Once the image is built, the following command can be used:
+Once the image is built, the following commands can be used to start the container:
 
 ```
 chmod +x start_container.sh
 ./start_container.sh
+
 ```
+
+For graphics acceleration using and nvidia chip, the correct drivers must be installed, and the alternate script should be used instead:
+
+```
+chmod +x nvidia_start_container.sh
+./nvidia_start_container.sh
+```
+
 This will create a container from the built image and open a terminal in its /root directory. This container is already mostly set up to run the simulation. However, due to volume configurations the ros2 workspace used for topic bridging must still be built. Therefore the following process is necessary.
 
 ```

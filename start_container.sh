@@ -3,8 +3,7 @@ xhost +local:docker > /dev/null
 
 sudo docker run -it \
   --net=host \
-  --gpus all \
-  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  --rm \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
   -v ./image_vols/sim_ws:/root/sim_ws \

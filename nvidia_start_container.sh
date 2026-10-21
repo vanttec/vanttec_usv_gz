@@ -1,0 +1,12 @@
+# Docker x11
+xhost +local:docker > /dev/null
+
+sudo docker run -it \
+  --net=host \
+  --rm \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \ 
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v ./image_vols/sim_ws:/root/sim_ws \
+  usv-gz:latest
