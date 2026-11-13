@@ -71,18 +71,21 @@
       <pose>25 4 0 0 0 0</pose>
       <uri>round_buoy_red</uri>
       <name>red_0</name>
+      <static>false</static>
     </include>
 
     <include>
       <pose>18 -2 0 0 0 0</pose>
       <uri>round_buoy_red</uri>
       <name>red_1</name>
+      <static>false</static>
     </include>
 
     <include>
       <pose>12 6 0 0 0 0</pose>
       <uri>round_buoy_red</uri>
       <name>red_2</name>
+      <static>false</static>
     </include>
 
     <!-- <include>

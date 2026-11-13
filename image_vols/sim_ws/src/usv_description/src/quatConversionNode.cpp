@@ -29,22 +29,20 @@ public:
   QuatConversionNode()
   : Node("quat_conversion_node")
   {
-    // Create Publisher for the extracted Z angle (Yaw)
+    // Create Publisher for the extracted orientation
     publisher_sbg_quat = this->create_publisher<sbg_driver::msg::SbgEkfQuat>(
       "/sbg/ekf_quat", 10);
-
-    // Create publisher to extract arbitrary distance value
-    publisher_distance = this->create_publisher<std_msgs::msg::Float64>(
-      "/mausv/distance", 10);
 
     // Create Subscription to the Odometry topic
     subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "/gz/odometry", 10, 
       std::bind(&QuatConversionNode::odom_callback, this, std::placeholders::_1));
 
+    // Subscribe to gazebo's ENU format IMU topic
     subscription_enu_imu = this->create_subscription<sensor_msgs::msg::Imu>("/imu/data_enu",
        10, std::bind(&QuatConversionNode::imu_callback,this,std::placeholders::_1));
 
+    // Create publisher for NED IMU topic
     imu_ned_pub = this->create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);
 
     // GPS conversion
@@ -70,13 +68,9 @@ public:
     publisher_sbg_nav = this->create_publisher<sbg_driver::msg::SbgEkfNav>(
       "/sbg/ekf_nav", 10);
 
-    // Initialize random number generator for Gaussian noise
+    // Random number generator for Gaussian noise
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     generator_.seed(seed);
-
-    // Record start time
-    start_time_ = this->now();
-
   }
 
 private:
@@ -84,7 +78,9 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
     // 1. Create a new Imu message and copy the original data (keeps timestamp, frame_id, etc.)
     sensor_msgs::msg::Imu imu_ned = *msg;
 
-    // Optional: Update the frame_id to reflect the new coordinate frame
+    // Update the gz timestamp
+    current_time =  imu_ned.header.stamp;
+
     imu_ned.header.frame_id = msg->header.frame_id + "_ned";
 
     // 2. Translate Linear Acceleration (X -> Y, Y -> X, Z -> -Z)
@@ -108,7 +104,7 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
     
     // Apply rotation to the quaternion
     q_ned = q_rot * q_enu;
-    q_ned.normalize(); // Always normalize after quaternion math
+    q_ned.normalize();
     
     // Convert back to ROS message format
     imu_ned.orientation.w = q_ned.w();
@@ -117,7 +113,6 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
     imu_ned.orientation.z = q_ned.z();
     
     // 5. Translate Covariance Matrices
-    // Using 'auto' allows C++ to automatically deduce the ROS 2 covariance array type
     auto rotate_covariance = [](const auto& in, auto& out) {
         if (in[0] == -1.0) { 
             // -1.0 indicates covariance is unknown, pass it through unchanged
@@ -136,6 +131,140 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
 
     // 6. Publish the converted message
     imu_ned_pub->publish(imu_ned);
+
+
+    // Check for gps time initialization
+    if(!last_gps.nanoseconds()){
+      last_gps = current_time;
+    }
+    // Publish gps message at 25 gazebo hz
+    if(current_time-last_gps >= 40ms){
+      // Retrieve parameters
+      double ref_lat = this->get_parameter("ref_lat").as_double();
+      double ref_lon = this->get_parameter("ref_lon").as_double();
+      double ref_alt = this->get_parameter("ref_alt").as_double();
+      double var_x = this->get_parameter("variance_x").as_double();
+      double var_y = this->get_parameter("variance_y").as_double();
+      double var_z = this->get_parameter("variance_z").as_double();
+
+      // Create Normal Distributions for noise (std_dev = sqrt(variance))
+      std::normal_distribution<double> noise_x(0.0, std::sqrt(var_x));
+      std::normal_distribution<double> noise_y(0.0, std::sqrt(var_y));
+      std::normal_distribution<double> noise_z(0.0, std::sqrt(var_z));
+
+      // Extract Odometry positions (Assuming standard ENU: x=East, y=North, z=Up)
+      double odom_x = latest_odom_->pose.pose.position.x;
+      double odom_y = latest_odom_->pose.pose.position.y;
+      double odom_z = latest_odom_->pose.pose.position.z;
+
+      // Apply noise
+      double noisy_x = odom_x + noise_x(generator_);
+      double noisy_y = odom_y + noise_y(generator_);
+      double noisy_z = odom_z + noise_z(generator_);
+
+      // Earth radius in meters
+      const double R = 6378137.0; 
+      const double PI = 3.14159265358979323846;
+
+      // Convert Cartesian (m) to Geodetic (Lat/Lon/Alt)
+      double delta_lat = (noisy_y / R) * (180.0 / PI);
+      double delta_lon = (noisy_x / (R * std::cos(ref_lat * PI / 180.0))) * (180.0 / PI);
+
+      auto gps_msg = sensor_msgs::msg::NavSatFix();
+
+      // Set Header
+      gps_msg.header.stamp = this->now();
+      gps_msg.header.frame_id = "imu_link_ned";
+
+      // Set Status matching your sample
+      gps_msg.status.status = sensor_msgs::msg::NavSatStatus::STATUS_FIX; // 1
+      gps_msg.status.service = sensor_msgs::msg::NavSatStatus::SERVICE_GLONASS; // 2 (Based on your output)
+
+      // Set Coordinates
+      gps_msg.latitude = ref_lat + delta_lat;
+      gps_msg.longitude = ref_lon + delta_lon;
+      gps_msg.altitude = ref_alt + noisy_z;
+
+      // Set Covariance (Row-major: [xx, xy, xz, yx, yy, yz, zx, zy, zz])
+      gps_msg.position_covariance.fill(0.0);
+      gps_msg.position_covariance[0] = var_x; // East/East
+      gps_msg.position_covariance[4] = var_y; // North/North
+      gps_msg.position_covariance[8] = var_z; // Up/Up
+      gps_msg.position_covariance_type = sensor_msgs::msg::NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN; // 2
+
+      gps_pub->publish(gps_msg);
+
+      // PUBLISH SBG EKF NAV
+      // ------------------------------------------------------------------------------
+      auto sbg_nav_msg = sbg_driver::msg::SbgEkfNav();
+
+      // --- Header ---
+      sbg_nav_msg.header.stamp = gps_msg.header.stamp;
+      // This topic will be filled using NED
+      sbg_nav_msg.header.frame_id = "imu_link_ned"; 
+
+      // --- Time Stamp ---
+      sbg_nav_msg.time_stamp = current_time.nanoseconds() / 1000;
+      sbg_nav_msg.header.stamp = current_time;
+
+      // --- Coordinates ---
+      sbg_nav_msg.latitude = gps_msg.latitude;
+      sbg_nav_msg.longitude = gps_msg.longitude;
+      sbg_nav_msg.altitude = gps_msg.altitude;
+      
+      // Undulation (Difference between WGS-84 Ellipsoid and MSL). 
+      // In Sarasota, this is roughly -26.0 meters, but 0.0 is often fine for local simulation.
+      sbg_nav_msg.undulation = 0.0; 
+
+      // --- Velocity (ENU Convention) ---
+      // Direct 1:1 mapping from standard ROS 2 Odometry, changing from ENU to NED
+      // sbg_nav_msg.velocity.x = latest_odom_->twist.twist.linear.y; // North
+      // sbg_nav_msg.velocity.y = latest_odom_->twist.twist.linear.x; // East
+      // sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z; // Down
+
+      const auto & q_msg= latest_odom_->pose.pose.orientation;
+      tf2::Quaternion q(q_msg.x,q_msg.y,q_msg.z,q_msg.w);
+      double roll,pitch,yaw_enu;
+      tf2::Matrix3x3(q).getRPY(roll, pitch, yaw_enu);
+      const double x_b = latest_odom_->twist.twist.linear.x;
+      const double y_b = latest_odom_->twist.twist.linear.y;
+      const double c = std::cos(yaw_enu);
+      const double s = std::sin(yaw_enu);
+      const double v_north = x_b *s + y_b * c;
+      const double v_east = x_b*c-y_b*s;
+      sbg_nav_msg.velocity.x = v_north;
+      sbg_nav_msg.velocity.y = v_east;
+      sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z;
+
+      // --- Position Accuracy (1-Sigma, NED Convention) ---
+      // sqrt of variance gives the standard deviation
+      sbg_nav_msg.position_accuracy.x = std::sqrt(var_y); // East std_dev
+      sbg_nav_msg.position_accuracy.y = std::sqrt(var_x); // North std_dev
+      sbg_nav_msg.position_accuracy.z = std::sqrt(var_z); // Vertical std_dev
+
+      // --- Velocity Accuracy ---
+      // Set to 0.05 for simplicity
+      sbg_nav_msg.velocity_accuracy.y = 0.05;
+      sbg_nav_msg.velocity_accuracy.z = 0.05;
+
+      // --- Sample values for the status fields ---   
+      sbg_nav_msg.status.solution_mode = 4; // 4 = NAV_POSITION (Valid Navigation Solution)
+      sbg_nav_msg.status.position_valid = true; // (position error < 10m)
+      sbg_nav_msg.status.velocity_valid = true;
+      sbg_nav_msg.status.attitude_valid = true; 
+      sbg_nav_msg.status.heading_valid = true;
+      sbg_nav_msg.status.mag_ref_used = true; // Using magnetometer heading over gps
+      sbg_nav_msg.status.gps1_pos_used = true; // Simulating valid GPS signal
+      sbg_nav_msg.status.gps1_vel_used = true;
+      sbg_nav_msg.status.gps1_hdt_used = false; // GPS heading does not work consistently in the real world
+      sbg_nav_msg.status.gps2_pos_used = false; // No second antenna used
+      sbg_nav_msg.status.gps2_vel_used = false;
+      sbg_nav_msg.status.gps2_hdt_used = false;
+
+      publisher_sbg_nav->publish(sbg_nav_msg);
+      
+      last_gps = current_time;
+    }
 }
 
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -169,6 +298,11 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
     out_msg.quaternion.y = q_ned.getY();
     out_msg.quaternion.z = q_ned.getZ();
     out_msg.quaternion.w = q_ned.getW();
+    
+    // --- Time Stamps ---
+    current_time = msg->header.stamp;
+    out_msg.header.stamp = current_time;
+    out_msg.time_stamp = current_time.nanoseconds() / 1000;
 
     // --- Sample values for the status fields ---   
     out_msg.status.solution_mode = 4; // 4 = NAV_POSITION (Valid Navigation Solution)
@@ -188,151 +322,17 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
     // 4. Publish the angle
     publisher_sbg_quat->publish(out_msg);
 
-    double current_x = msg->pose.pose.position.x;
-    double distance = 18.3-current_x;
-    std_msgs::msg::Float64 msg_distance = std_msgs::msg::Float64();
-    msg_distance.data = distance;
-    publisher_distance->publish(msg_distance);
-
     latest_odom_ = msg;
 
   }
 
   void gps_callback(){
-    // Wait for first odometry measurement
-    if(!latest_odom_){
-      return;
-    }
 
-    // Retrieve parameters
-    double ref_lat = this->get_parameter("ref_lat").as_double();
-    double ref_lon = this->get_parameter("ref_lon").as_double();
-    double ref_alt = this->get_parameter("ref_alt").as_double();
-    double var_x = this->get_parameter("variance_x").as_double();
-    double var_y = this->get_parameter("variance_y").as_double();
-    double var_z = this->get_parameter("variance_z").as_double();
-
-    // Create Normal Distributions for noise (std_dev = sqrt(variance))
-    std::normal_distribution<double> noise_x(0.0, std::sqrt(var_x));
-    std::normal_distribution<double> noise_y(0.0, std::sqrt(var_y));
-    std::normal_distribution<double> noise_z(0.0, std::sqrt(var_z));
-
-    // Extract Odometry positions (Assuming standard ENU: x=East, y=North, z=Up)
-    double odom_x = latest_odom_->pose.pose.position.x;
-    double odom_y = latest_odom_->pose.pose.position.y;
-    double odom_z = latest_odom_->pose.pose.position.z;
-
-    // Apply noise
-    double noisy_x = odom_x + noise_x(generator_);
-    double noisy_y = odom_y + noise_y(generator_);
-    double noisy_z = odom_z + noise_z(generator_);
-
-    // Earth radius in meters
-    const double R = 6378137.0; 
-    const double PI = 3.14159265358979323846;
-
-    // Convert Cartesian (m) to Geodetic (Lat/Lon/Alt)
-    double delta_lat = (noisy_y / R) * (180.0 / PI);
-    double delta_lon = (noisy_x / (R * std::cos(ref_lat * PI / 180.0))) * (180.0 / PI);
-
-    auto gps_msg = sensor_msgs::msg::NavSatFix();
-
-    // Set Header
-    gps_msg.header.stamp = this->now();
-    gps_msg.header.frame_id = "imu_link_ned";
-
-    // Set Status matching your sample
-    gps_msg.status.status = sensor_msgs::msg::NavSatStatus::STATUS_FIX; // 1
-    gps_msg.status.service = sensor_msgs::msg::NavSatStatus::SERVICE_GLONASS; // 2 (Based on your output)
-
-    // Set Coordinates
-    gps_msg.latitude = ref_lat + delta_lat;
-    gps_msg.longitude = ref_lon + delta_lon;
-    gps_msg.altitude = ref_alt + noisy_z;
-
-    // Set Covariance (Row-major: [xx, xy, xz, yx, yy, yz, zx, zy, zz])
-    gps_msg.position_covariance.fill(0.0);
-    gps_msg.position_covariance[0] = var_x; // East/East
-    gps_msg.position_covariance[4] = var_y; // North/North
-    gps_msg.position_covariance[8] = var_z; // Up/Up
-    gps_msg.position_covariance_type = sensor_msgs::msg::NavSatFix::COVARIANCE_TYPE_DIAGONAL_KNOWN; // 2
-
-    gps_pub->publish(gps_msg);
-
-    // PUBLISH SBG EKF NAV
-    // ------------------------------------------------------------------------------
-    auto sbg_nav_msg = sbg_driver::msg::SbgEkfNav();
-
-    // --- Header ---
-    sbg_nav_msg.header.stamp = gps_msg.header.stamp;
-    // This topic will be filled using NED
-    sbg_nav_msg.header.frame_id = "imu_link_ned"; 
-
-    // --- Time Stamp ---
-    auto time_since_start = this->now() - start_time_;
-    sbg_nav_msg.time_stamp = time_since_start.nanoseconds() / 1000;
-
-    // --- Coordinates ---
-    sbg_nav_msg.latitude = gps_msg.latitude;
-    sbg_nav_msg.longitude = gps_msg.longitude;
-    sbg_nav_msg.altitude = gps_msg.altitude;
-    
-    // Undulation (Difference between WGS-84 Ellipsoid and MSL). 
-    // In Sarasota, this is roughly -26.0 meters, but 0.0 is often fine for local simulation.
-    sbg_nav_msg.undulation = 0.0; 
-
-    // --- Velocity (ENU Convention) ---
-    // Direct 1:1 mapping from standard ROS 2 Odometry, changing from ENU to NED
-    // sbg_nav_msg.velocity.x = latest_odom_->twist.twist.linear.y; // North
-    // sbg_nav_msg.velocity.y = latest_odom_->twist.twist.linear.x; // East
-    // sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z; // Down
-
-    const auto & q_msg= latest_odom_->pose.pose.orientation;
-    tf2::Quaternion q(q_msg.x,q_msg.y,q_msg.z,q_msg.w);
-    double roll,pitch,yaw_enu;
-    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw_enu);
-    const double x_b = latest_odom_->twist.twist.linear.x;
-    const double y_b = latest_odom_->twist.twist.linear.y;
-    const double c = std::cos(yaw_enu);
-    const double s = std::sin(yaw_enu);
-    const double v_north = x_b *s + y_b * c;
-    const double v_east = x_b*c-y_b*s;
-    sbg_nav_msg.velocity.x = v_north;
-    sbg_nav_msg.velocity.y = v_east;
-    sbg_nav_msg.velocity.z = -latest_odom_->twist.twist.linear.z;
-
-    // --- Position Accuracy (1-Sigma, NED Convention) ---
-    // sqrt of variance gives the standard deviation
-    sbg_nav_msg.position_accuracy.x = std::sqrt(var_y); // East std_dev
-    sbg_nav_msg.position_accuracy.y = std::sqrt(var_x); // North std_dev
-    sbg_nav_msg.position_accuracy.z = std::sqrt(var_z); // Vertical std_dev
-
-    // --- Velocity Accuracy ---
-    // Set to 0.05 for simplicity
-    sbg_nav_msg.velocity_accuracy.y = 0.05;
-    sbg_nav_msg.velocity_accuracy.z = 0.05;
-
-    // --- Sample values for the status fields ---   
-    sbg_nav_msg.status.solution_mode = 4; // 4 = NAV_POSITION (Valid Navigation Solution)
-    sbg_nav_msg.status.position_valid = true; // (position error < 10m)
-    sbg_nav_msg.status.velocity_valid = true;
-    sbg_nav_msg.status.attitude_valid = true; 
-    sbg_nav_msg.status.heading_valid = true;
-    sbg_nav_msg.status.mag_ref_used = true; // Using magnetometer heading over gps
-    sbg_nav_msg.status.gps1_pos_used = true; // Simulating valid GPS signal
-    sbg_nav_msg.status.gps1_vel_used = true;
-    sbg_nav_msg.status.gps1_hdt_used = false; // GPS heading does not work consistently in the real world
-    sbg_nav_msg.status.gps2_pos_used = false; // No second antenna used
-    sbg_nav_msg.status.gps2_vel_used = false;
-    sbg_nav_msg.status.gps2_hdt_used = false;
-
-    publisher_sbg_nav->publish(sbg_nav_msg);
   }
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr subscription_enu_imu;
   rclcpp::Publisher<sbg_driver::msg::SbgEkfQuat>::SharedPtr publisher_sbg_quat;
-  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher_distance;
   rclcpp::Publisher<sbg_driver::msg::SbgEkfNav>::SharedPtr publisher_sbg_nav;
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr gps_pub;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_ned_pub;
@@ -340,7 +340,8 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   nav_msgs::msg::Odometry::SharedPtr latest_odom_;
 
   std::default_random_engine generator_;
-  rclcpp::Time start_time_;
+  rclcpp::Time current_time;
+  rclcpp::Time last_gps;
   
   
 };

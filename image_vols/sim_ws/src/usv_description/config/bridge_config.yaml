@@ -19,16 +19,6 @@
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
 # ------ ros to gz (commands)
-- ros_topic_name: "/usv2/left_thruster"
-  gz_topic_name: "/model/vtec_s5/joint/left_engine_propeller_joint/cmd_thrust"
-  ros_type_name: "std_msgs/msg/Float64"
-  gz_type_name: "gz.msgs.Double"
-  direction: ROS_TO_GZ
-- ros_topic_name: "/usv2/right_thruster"
-  gz_topic_name: "/model/vtec_s5/joint/right_engine_propeller_joint/cmd_thrust"
-  ros_type_name: "std_msgs/msg/Float64"
-  gz_type_name: "gz.msgs.Double"
-  direction: ROS_TO_GZ
 - ros_topic_name: "/usv/left_thruster"
   gz_topic_name: "/model/vtec_s4/joint/left_engine_propeller_joint/cmd_thrust"
   ros_type_name: "std_msgs/msg/Float64"
